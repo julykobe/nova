@@ -119,25 +119,57 @@ def generate_identity_headers(context, status='Confirmed'):
 
 def _create_glance_client(context, host, port, use_ssl, version=1):
     """Instantiate a new glanceclient.Client object."""
+    ###实例化一个正确的新的glanceclient.Client对象； 
+    # 获取正确的glanceclient.version.client.Client类； 
+    # 因为在python-glanceclient中一共定义了两个版本的客户端： 
+    # glanceclient.v1和glanceclient.v2 
+
+    # 参数； 
+    # context：上下文信息； 
+    # self.host：glance api service的host值； 
+    # self.port：glance api service的port值； 
+    # self.use_ssl：glance api service的use_ssl值； 
+    # version：版本信息； 
+
+    # http和https使用的是完全不同的连接方式,用的端口也不一样,前者是80,后者是443。http的连接很简单,是无状态的；  
+    # HTTPS协议是由SSL+HTTP协议构建的可进行加密传输、身份认证的网络协议，要比http协议安全
     params = {}
     if use_ssl:
         scheme = 'https'
         # https specific params
+        # glance_api_insecure：这个参数定义了是否执行不安全的SSL协议（https）；  
+        # 参数的默认值为False；  
         params['insecure'] = CONF.glance_api_insecure
         params['ssl_compression'] = False
     else:
         scheme = 'http'
 
+    # auth_strategy：这个参数定义了身份认证所使用的策略是noauth或者是keystone；  
+    # 参数的默认值是'noauth'；  
     if CONF.auth_strategy == 'keystone':
         # NOTE(isethi): Glanceclient <= 0.9.0.49 accepts only
         # keyword 'token', but later versions accept both the
         # header 'X-Auth-Token' and 'token'
         params['token'] = context.auth_token
         params['identity_headers'] = generate_identity_headers(context)
+    
+    #检查是否是ipv6地址，应该是H版新加
     if utils.is_valid_ipv6(host):
         #if so, it is ipv6 address, need to wrap it with '[]'
         host = '[%s]' % host
+
+    # 组成能够访问glance api service的URL形式
     endpoint = '%s://%s:%s' % (scheme, host, port)
+
+    # glanceclient.Client：  
+    # 获取正确的glanceclient.version.client.Client类；  
+    # 因为一共有两个版本的客户端：glanceclient.v1和glanceclient.v2  
+          
+    # str(version)：版本信息；  
+    # endpoint：访问glance api服务的端点，为能够访问glance api service的URL形式：scheme://host:port；  
+    # params：一些参数集合；
+
+    #由代码导入的模块可以知道，这就访问了glance客户端组件，并且调用了glance客户端组件glanceclient中的/glanceclient/client.py----def Client(version, *args, **kwargs)
     return glanceclient.Client(str(version), endpoint, **params)
 
 
@@ -186,9 +218,24 @@ class GlanceClientWrapper(object):
 
     def _create_onetime_client(self, context, version):
         """Create a client that will be used for one call."""
+
+        # 建立并返回一个正确的glanceclient.Client客户端，它会被用于一次call
+
+        #get_api_servers：以(host, port, 'https')的形式作为一个元素，获取glance api servers的列表api_servers
+        # 返回的是不断循环的api_servers列表中的元素（因为执行了这个方法：itertools.cycle）
+        #方法get_api_servers获取了glance api service的列表，列表中的每一个元素都是(host, port, 'https')的形式，如果进入方法可以看到，在方法的结尾返回的是：itertools.cycle(api_servers)，这是一个无界迭代器，会重复不断对列表api_servers进行循环读取；因此再执行self.api_servers.next()语句，就相当于随机的获取一组可用的(host, port, 'https')，用于后续建立glance客户端
         if self.api_servers is None:
             self.api_servers = get_api_servers()
+
+        # 从api_servers中随机获取某一个元素，进而获取一组host、port、use_ssl的值
         self.host, self.port, self.use_ssl = self.api_servers.next()
+
+        # _create_glance_client：实例化一个正确的新的glanceclient.Client对象
+        # context：上下文信息；  
+        # self.host：glance api service的host值；  
+        # self.port：glance api service的port值；  
+        # self.use_ssl：glance api service的use_ssl值；  
+        # version：版本信息；
         return _create_glance_client(context,
                                      self.host, self.port,
                                      self.use_ssl, version)
@@ -197,14 +244,52 @@ class GlanceClientWrapper(object):
         """Call a glance client method.  If we get a connection error,
         retry the request according to CONF.glance_num_retries.
         """
+
+        ###调用一个glance客户端的对象，调用其中的get方法，获取image镜像
+        # 尝试一定次数连接glance，如果连接成功，这时会获取glance客户端对象，并返回client.images.get
+        # 如果到达最大尝试连接次数都没有连接成功，则会引发异常
+
+        #context:上下文信息
+        #1：传到下一个方法中，作为version参数
+        # 'get'：作为方法参数，传到下一个函数
+        # image_id：获取的image镜像ID
+
+        #各种异常
         retry_excs = (glanceclient.exc.ServiceUnavailable,
                 glanceclient.exc.InvalidEndpoint,
                 glanceclient.exc.CommunicationError)
+
+        #glance_num_retries：这个参数定义了当从glance下载image镜像时，重试的次数
+        # 默认为0应该是表示会下载无数次
+        # 加1是为了排除无数次下载尝试的可能，而定义为只有1次重新下载的机会
+        # 计算从glance下载image镜像重试机会的次数
         num_attempts = 1 + CONF.glance_num_retries
 
+        # 从1循环到num_attempts
         for attempt in xrange(1, num_attempts + 1):
+            
+            # 得到glance客户端对象，如果没有定义，则新建立一个客户端对象
+            # _create_onetime_client：建立并返回一个正确的glanceclient.Client客户端，它会被用于一次call
+            # version：版本
             client = self.client or self._create_onetime_client(context,
                                                                 version)
+
+            # 这里传进来的一个method是get，所以返回的是client.images.get
+            # getattr(client.images, method)(*args, **kwargs)调用的就是客户端对象类中的get方法，获取image镜像
+            #因为传入的menthod参数为‘get’，所以这条语句就相当于：return client.images.get(*args, **kwargs)
+            #即调用了/glanceclient/glanceclient/v1/images.py----def get(self, image)，来获取指定的镜像元数据
+            # def get(self, image):  
+            # """ 
+            # 为指定的镜像获取元数据； 
+            # image: 用于查找镜像的对象或者是镜像ID； 
+            # """  
+      
+            # # 根据image获取image的ID值；  
+            # image_id = base.getid(image)  
+      
+            # resp, body = self.api.raw_request('HEAD', '/v1/images/%s' % urllib.quote(image_id))  
+            # meta = self._image_meta_from_headers(dict(resp.getheaders()))  
+            # return Image(self, meta)  
             try:
                 return getattr(client.images, method)(*args, **kwargs)
             except retry_excs as e:
@@ -216,6 +301,8 @@ class GlanceClientWrapper(object):
                                "%(extra)s.") %
                              {'host': host, 'port': port,
                               'method': method, 'extra': extra})
+                
+                # 如果达到了最大的尝试下载次数，则会引发异常，提示glance连接失败
                 if attempt == num_attempts:
                     extra = 'done trying'
                     LOG.exception(error_msg)
@@ -223,6 +310,7 @@ class GlanceClientWrapper(object):
                             host=host, port=port, reason=str(e))
                 LOG.exception(error_msg)
                 time.sleep(1)
+        #这个方法主要完成了：根据配置参数确定最大链接访问glance客户端的次数，在不超过最大次数的情况下，尝试确定正确的客户端版本，建立glance客户端类的对象，通过glance客户端中images.py中的get方法，获取指定的镜像元数据
 
 
 class GlanceImageService(object):
@@ -266,14 +354,31 @@ class GlanceImageService(object):
 
     def show(self, context, image_id):
         """Returns a dict with image data for the given opaque image id."""
+        ###以字典的形式返回给定image镜像ID的镜像数据
+        #以字典的形式返回给定image镜像ID的镜像数据
+        #转换从glance下载的镜像数据为python可处理的字典格式
+
+        ###参数：
+        #image_id：获取的image镜像ID
+        ###call：调用一个glance客户端的对象，调用其中的get方法，获取image镜像元数据
+        #位于/nova/image/glance.py----def call(self, context, version, method, *args, **kwargs)
+        #这个方法尝试一定次数连接glance，从glance客户端下载image，如果连接成功，这时会获取glance客户端对象
+        #并返回client.images.get给image
+        ###参数：
+        #1：传到下一个方法中，作为version参数
+        # 'get'：作为方法参数，传到下一个函数
+        # image_id：获取的image镜像ID
         try:
             image = self._client.call(context, 1, 'get', image_id)
         except Exception:
             _reraise_translated_image_exception(image_id)
 
+        ### 如果image是不可用的，则引发异常
+        # _is_image_available：检测镜像image的可用性
         if not _is_image_available(context, image):
             raise exception.ImageNotFound(image_id=image_id)
 
+        ### _translate_from_glance：把通过glanceclient获取的镜像元数据转换为python可处理的数据格式（原为JSON格式）
         base_image_meta = _translate_from_glance(image)
         return base_image_meta
 

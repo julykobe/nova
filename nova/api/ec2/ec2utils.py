@@ -107,8 +107,11 @@ def id_to_glance_id(context, image_id):
 @memoize
 def glance_id_to_id(context, glance_id):
     """Convert a glance id to an internal (db) id."""
+    #根据给定的glance_id值，查找到匹配的S3格式镜像数据信息，进一步获取镜像的id值返回
     if glance_id is None:
         return
+
+    # s3_image_get_by_uuid：通过给定的glance_id查找本地的S3格式的镜像
     try:
         return db.s3_image_get_by_uuid(context, glance_id)['id']
     except exception.NotFound:

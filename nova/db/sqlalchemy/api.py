@@ -9,7 +9,7 @@
 #
 #         http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
+#    Unless required by applicable law or agreed to in writing, <software></software>
 #    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
@@ -4947,6 +4947,14 @@ def vol_usage_update(context, id, rd_req, rd_bytes, wr_req, wr_bytes,
 
 def s3_image_get(context, image_id):
     """Find local s3 image represented by the provided id."""
+    ###model_query方法实现的是对数据库按照一定的规则的查询操作并返回结果
+    ###model.S3Image也是个类
+    #class S3Image(BASE, NovaBase):
+    #   __tablename__ = 's3_images'
+    #   id = Column(Integer, primary_key=True, nullable=False, autoincrement=True)
+    #   uuid = Column(String(36), nullable=False)
+    ###这个类从NovaBase类继承，这也是model_query方法所要求的。看看这个类，我们可以理解为，它创建了一个数据库中的表s3_images，并且定义数据表的结构，有两个属性id和uuid
+    ###所以我们就能够知道id_to_glance_id(context, image_id)实现的是根据给定的image_id值，查询数据库，找到匹配的表信息，获取它的S3Image.uuid并返回，赋值给：image_uuid = S3Image.uuid；
     result = model_query(context, models.S3Image, read_deleted="yes").\
                  filter_by(id=image_id).\
                  first()
@@ -4959,6 +4967,12 @@ def s3_image_get(context, image_id):
 
 def s3_image_get_by_uuid(context, image_uuid):
     """Find local s3 image represented by the provided uuid."""
+    # 通过给定的image_uuid查找S3格式的镜像数据信息
+    ###model.S3Image也是个类
+    #class S3Image(BASE, NovaBase):
+    #   __tablename__ = 's3_images'
+    #   id = Column(Integer, primary_key=True, nullable=False, autoincrement=True)
+    #   uuid = Column(String(36), nullable=False)
     result = model_query(context, models.S3Image, read_deleted="yes").\
                  filter_by(uuid=image_uuid).\
                  first()

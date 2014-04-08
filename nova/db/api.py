@@ -1674,11 +1674,13 @@ def vol_usage_update(context, id, rd_req, rd_bytes, wr_req, wr_bytes,
 
 def s3_image_get(context, image_id):
     """Find local s3 image represented by the provided id."""
+    ###在db/sqlalchemy/api.py
     return IMPL.s3_image_get(context, image_id)
 
 
 def s3_image_get_by_uuid(context, image_uuid):
     """Find local s3 image represented by the provided uuid."""
+    ###在db/sqlalchemy/api.py
     return IMPL.s3_image_get_by_uuid(context, image_uuid)
 
 

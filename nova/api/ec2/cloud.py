@@ -124,7 +124,54 @@ def _state_description(vm_state, _shutdown_terminate):
     return {'code': inst_state.name_to_code(name),
             'name': name}
 
+#     先来看看kwargs中'block_device_mapping'所表示的数据形式：
 
+        # [
+        #        ({'device_name': '/dev/fake0',
+        #           'ebs': {'snapshot_id': 'snap-12345678',
+        #                   'volume_size': 1}},
+        #         {'device_name': '/dev/fake0',
+        #          'snapshot_id': '00000000-1111-2222-3333-444444444444',
+        #          'volume_size': 1,
+        #          'delete_on_termination': True}),
+
+        #         ({'device_name': '/dev/fake1',
+        #           'ebs': {'snapshot_id': 'snap-23456789',
+        #                   'delete_on_termination': False}},
+        #          {'device_name': '/dev/fake1',
+        #           'snapshot_id': '11111111-2222-3333-4444-555555555555',
+        #           'delete_on_termination': False}),
+
+        #         ({'device_name': '/dev/fake2',
+        #           'ebs': {'snapshot_id': 'vol-87654321',
+        #                   'volume_size': 2}},
+        #         {'device_name': '/dev/fake2',
+        #          'volume_id': '22222222-3333-4444-5555-666666666666',
+        #          'volume_size': 2,
+        #          'delete_on_termination': True}),
+
+        #         ({'device_name': '/dev/fake3',
+        #           'ebs': {'snapshot_id': 'vol-98765432',
+        #                   'delete_on_termination': False}},
+        #          {'device_name': '/dev/fake3',
+        #           'volume_id': '77777777-8888-9999-0000-aaaaaaaaaaaa',
+        #           'delete_on_termination': False}),
+
+        #         ({'device_name': '/dev/fake4',
+        #           'ebs': {'no_device': True}},
+        #          {'device_name': '/dev/fake4',
+        #           'no_device': True}),
+
+        #         ({'device_name': '/dev/fake5',
+        #          'virtual_name': 'ephemeral0'},
+        #         {'device_name': '/dev/fake5',
+        #          'virtual_name': 'ephemeral0'}),
+
+        #         ({'device_name': '/dev/fake6',
+        #          'virtual_name': 'swap'},
+        #         {'device_name': '/dev/fake6',
+        #          'virtual_name': 'swap'}),
+        # ]
 def _parse_block_device_mapping(bdm):
     """Parse BlockDeviceMappingItemType into flat hash
     BlockDevicedMapping.<N>.DeviceName
@@ -135,12 +182,19 @@ def _parse_block_device_mapping(bdm):
     BlockDevicedMapping.<N>.VirtualName
     => remove .Ebs and allow volume id in SnapshotId
     """
+    # 解析块设备映射bdm
     ebs = bdm.pop('ebs', None)
     if ebs:
         ec2_id = ebs.pop('snapshot_id', None)
         if ec2_id:
+
+            # 判断如果是快照；  
+            # 则根据获取的ec2_id值，从匹配的数据库信息中获取uuid值赋值给bdm['snapshot_id']，更新bdm中的相应数据；  
             if ec2_id.startswith('snap-'):
                 bdm['snapshot_id'] = ec2utils.ec2_snap_id_to_uuid(ec2_id)
+            
+            # 判断如果是volume；  
+            # 则根据获取的ec2_id值，从匹配的数据库信息中获取uuid值赋值给bdm['snapshot_id']，更新bdm中的相应数据
             elif ec2_id.startswith('vol-'):
                 bdm['volume_id'] = ec2utils.ec2_vol_id_to_uuid(ec2_id)
             ebs.setdefault('delete_on_termination', True)
@@ -1264,7 +1318,10 @@ class CloudController(object):
                                                       address=public_ip)
         return {'return': "true"}
 
+    ###@@@建立实例过程
     def run_instances(self, context, **kwargs):
+
+        ###设置建立实例的最大，最小数目
         min_count = int(kwargs.get('min_count', 1))
         max_count = int(kwargs.get('max_count', min_count))
         try:
@@ -1279,6 +1336,7 @@ class CloudController(object):
             msg = _('min_count must be <= max_count')
             raise exception.InvalidInput(message=msg)
 
+        ###获取token
         client_token = kwargs.get('client_token')
         if client_token:
             resv_id = self._resv_id_from_token(context, client_token)
@@ -1288,20 +1346,37 @@ class CloudController(object):
                 # instance
                 return self._format_run_instances(context, resv_id)
 
+        ###获取kwargs['kernel_id']指定的镜像image数据返回给kernel；
+        #kernel_id为虚拟机内核id值
         if kwargs.get('kernel_id'):
+            #@1@ _get_image
             kernel = self._get_image(context, kwargs['kernel_id'])
+            ### 根据kernel['id']查询数据库中匹配的S3镜像数据，获取它的uuid属性，并返回
+            # 返回匹配的db.models.S3Image.uuid给kwargs['kernel_id']
             kwargs['kernel_id'] = ec2utils.id_to_glance_id(context,
                                                            kernel['id'])
+        
+        ###获取获取kwargs['ramdisk_id']指定的镜像image数据返回给ramdisk；
+        #获取更新的kwargs['ramdisk_id']
         if kwargs.get('ramdisk_id'):
             ramdisk = self._get_image(context, kwargs['ramdisk_id'])
+            ### 根据ramdisk['id']查询数据库中匹配的S3镜像数据，获取它的uuid属性，并返回
+            # 返回匹配的db.models.S3Image.uuid给kwargs['ramdisk_id']
             kwargs['ramdisk_id'] = ec2utils.id_to_glance_id(context,
                                                             ramdisk['id'])
+        ###循环获取每一块设备映射
+        #解析块设备映射bdm
         for bdm in kwargs.get('block_device_mapping', []):
+            #@2@_parse_block_device_mapping(bdm)
             _parse_block_device_mapping(bdm)
 
+        # 获取kwargs['image_id']指定的镜像image数据；
         image = self._get_image(context, kwargs['image_id'])
+        # 根据image['id']查询数据库中匹配的S3镜像数据，获取它的uuid属性，并返回
+        # 返回匹配的db.models.S3Image.uuid给image_uuid
         image_uuid = ec2utils.id_to_glance_id(context, image['id'])
 
+        ###获取镜像image的状态
         if image:
             image_state = self._get_image_state(image)
         else:
@@ -1311,10 +1386,12 @@ class CloudController(object):
             msg = _('Image must be available')
             raise exception.ImageNotActive(message=msg)
 
+        ###获取镜像规模
         flavor = flavor_obj.Flavor.get_by_name(context,
                                                kwargs.get('instance_type',
                                                           None))
-
+        ###create：准备实例，并且发送实例的信息和要运行实例的请求消息到远程调度器scheduler
+        #实现实例的建立和运行，由调度器完成，这部分代码实际上只是实现请求消息的发送
         (instances, resv_id) = self.compute_api.create(context,
             instance_type=obj_base.obj_to_primitive(flavor),
             image_href=image_uuid,
@@ -1435,9 +1512,26 @@ class CloudController(object):
             self.compute_api.start(context, instance)
         return True
 
+
+    ###获取ec2_id指定的镜像image元数据
+    #这个方法实现的就是尝试链接glance客户端，根据ec2_id值获取匹配的镜像元数据分别赋值给kernel、ramdisk和image
+    ###context:上下文信息
+    ###ec2_id = kwargs['kernel_id']，从参数信息中获取'kernel_id'值，kernel_id为虚拟机内核ID值
     def _get_image(self, context, ec2_id):
         try:
+            ###ec2_id_to_id:转换一个EC2的ID为一个实例（镜像）的ID（INT格式）；（主要是格式变换的问题）
+            ###转换之后赋值给internal_id，也就是镜像image的内置ID（？？？）
             internal_id = ec2utils.ec2_id_to_id(ec2_id)
+            ###show方法完成了以下的工作：
+            ###转换镜像image的ID值internal_id到image_uuid
+            ###根据给定的image_uuid从glance下载image元数据，并且转换为字典格式
+            ###转换镜像image中的image_uuid到新的image_id
+            ###更新image当中的相关属性，返回更新后的image数据
+
+            ###context：上下文信息
+            ###internal_id：实例镜像的ID值（从EC2 ID值变换了格式以后得到的）
+            ###注：S3是EC2的存储平台，所以这里调用/nova/image/s3.py中的show方法
+            ###真是凶残！
             image = self.image_service.show(context, internal_id)
         except (exception.InvalidEc2Id, exception.ImageNotFound):
             filters = {'name': ec2_id}
@@ -1446,9 +1540,17 @@ class CloudController(object):
                 return images[0]
             except IndexError:
                 raise exception.ImageNotFound(image_id=ec2_id)
+
+        ###通过ec2_id获取image_type
         image_type = ec2_id.split('-')[0]
+
+        ###通过image_type验证找到的镜像image是否是所要求找的镜像
+        ###如果通过ec2_id获取的image_type和通过获取的镜像image得到的image_type不一致
+        ###则引发异常，提示所要求找的镜像找不到
         if ec2utils.image_type(image.get('container_format')) != image_type:
             raise exception.ImageNotFound(image_id=ec2_id)
+
+        #### 返回获取的镜像数据
         return image
 
     def _format_image(self, image):
