@@ -304,10 +304,16 @@ def get_volume_uuid_from_int_id(context, int_id):
 
 def ec2_snap_id_to_uuid(ec2_id):
     """Get the corresponding UUID for the given ec2-id."""
+    #为给定的ec2-id获取相应快照的UUID值
+
+    # 获取admin的上下文信息
     ctxt = context.get_admin_context()
 
     # NOTE(jgriffith) first strip prefix to get just the numeric
+    # 转换一个EC2的ID为一个实例的ID（INT格式）；（主要是格式变换的问题）
     int_id = ec2_id_to_id(ec2_id)
+
+    # 根据给定的int_id获取相应快照的UUID值
     return get_snapshot_uuid_from_int_id(ctxt, int_id)
 
 

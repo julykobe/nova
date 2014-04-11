@@ -3454,6 +3454,7 @@ def get_ec2_snapshot_id_by_uuid(context, snapshot_id):
 
 @require_context
 def get_snapshot_uuid_by_ec2_id(context, ec2_id):
+    #根据给定的ec2_id获取相应快照的UUID值
     result = _ec2_snapshot_get_query(context).\
                     filter_by(id=ec2_id).\
                     first()

@@ -931,9 +931,15 @@ class API(base.Base):
         creation.
         """
 
+        # 验证所有的输入实例参数
+        # 发送要运行实例（'run_instance'）的请求消息到远程调度器
         # Normalize and setup some parameters
+
+        # generate_uid：随机生成一个uid值赋值给reservation_id
         if reservation_id is None:
             reservation_id = utils.generate_uid('r')
+
+        # 验证输入参数？
         security_groups = security_groups or ['default']
         min_count = min_count or 1
         max_count = max_count or min_count
@@ -992,6 +998,8 @@ class API(base.Base):
 
         self._update_instance_group(context, instances, scheduler_hints)
 
+        # 循环获取instances中每个实例action的一些相关信息（包括启动时间等） 
+        # _record_action_start获取要启动的实例action的一些相关信息（包括启动时间等）
         for instance in instances:
             self._record_action_start(context, instance,
                                       instance_actions.CREATE)
@@ -1319,13 +1327,19 @@ class API(base.Base):
 
         Returns a tuple of (instances, reservation_id)
         """
+        # 准备实例，并且发送实例的信息和要运行实例的请求消息到远程调度器scheduler
+        # 实现实例的建立和运行，由调度器完成，这部分代码实际上只是实现请求消息的发送
+        # 返回一个元组（实例或者是reservation_id的元组），元组里面的实例可以是“None”或者是实例字典的一个列表，这要取决于是否等待scheduler返回的信息
 
+        # 验证是否有资格执行creat这个方法，policy是nova中的一个资格验证机制
         self._check_create_policies(context, availability_zone,
                 requested_networks, block_device_mapping)
 
         if requested_networks and max_count > 1 and utils.is_neutron():
             self._check_multiple_instances_neutron_ports(requested_networks)
 
+        # 验证所有的输入实例参数
+        # 发送要运行实例（'run_instance'）的请求消息到远程调度器
         return self._create_instance(
                                context, instance_type,
                                image_href, kernel_id, ramdisk_id,
