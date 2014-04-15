@@ -685,8 +685,10 @@ def get_remote_image_service(context, image_href):
     :returns: a tuple of the form (image_service, image_id)
 
     """
+    #通过image_href创建image_service，参数是通过给定格式传入的id
     #NOTE(bcwaldon): If image_href doesn't look like a URI, assume its a
     # standalone image ID
+    #如果是裸的ID
     if '/' not in str(image_href):
         image_service = get_default_image_service()
         return image_service, image_href
